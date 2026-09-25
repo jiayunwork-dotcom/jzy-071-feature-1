@@ -85,6 +85,49 @@ export function elementStiffness(
   return Ke;
 }
 
+/**
+ * 单元一致质量矩阵（consistent mass），6×6 行主序：
+ *   Me = ρ t A /12 · [2 0 1 0 1 0;
+ *                     0 2 0 1 0 1;
+ *                     1 0 2 0 1 0;
+ *                     0 1 0 2 0 1;
+ *                     1 0 1 0 2 0;
+ *                     0 1 0 1 0 2]
+ * 由 Me = ρ t ∫ NᵀN dA 精确积分得到（形函数线性），保留节点间耦合，为非对角阵。
+ */
+export function elementConsistentMass(
+  elem: CstElement,
+  density: number,
+  thickness: number,
+): Float64Array {
+  const Me = new Float64Array(36);
+  const diag = (2 * density * thickness * elem.area) / 12;
+  const off = (density * thickness * elem.area) / 12;
+  for (let a = 0; a < 3; a++) {
+    for (let b = 0; b < 3; b++) {
+      Me[(a * 2) * 6 + b * 2] = a === b ? diag : off;
+      Me[(a * 2 + 1) * 6 + b * 2 + 1] = a === b ? diag : off;
+    }
+  }
+  return Me;
+}
+
+/**
+ * 单元集中质量矩阵（lumped mass），6×6 对角行主序：
+ * 把单元总质量 ρ t A 平均分配给 3 个节点，每节点 x/y 自由度各分得 ρ t A/3。
+ * 整体集中质量为纯对角阵。
+ */
+export function elementLumpedMass(
+  elem: CstElement,
+  density: number,
+  thickness: number,
+): Float64Array {
+  const Me = new Float64Array(36);
+  const m = (density * thickness * elem.area) / 3;
+  for (let a = 0; a < 6; a++) Me[a * 6 + a] = m;
+  return Me;
+}
+
 /** 单元一致体力载荷：fe = t·A·[bx, by, bx, by, bx, by]/3 */
 export function bodyForceLoad(elem: CstElement, thickness: number, bx: number, by: number): Float64Array {
   const fe = new Float64Array(6);

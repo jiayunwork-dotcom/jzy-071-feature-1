@@ -97,6 +97,12 @@ export interface Material {
   /** 厚度 t（平面应力下使用；平面应变内部按 t=1 处理） */
   thickness: number;
   model: 'planeStress' | 'planeStrain';
+  /**
+   * 质量密度 ρ（可缺省，缺省取钢材默认值，见 STEEL_DENSITY）。
+   * 在 mm-N-MPa 单位制下质量单位为 N·s²/mm，钢 ρ ≈ 7.85e-9 N·s²/mm⁴。
+   * 仅自由振动分析使用；静力分析不读该字段。
+   */
+  density?: number;
 }
 
 /** 完整分析模型 */
@@ -143,6 +149,48 @@ export interface AnalysisResult {
     iterations?: number;
     residual: number;
     constrainedDofs: number;
+  };
+}
+
+/** 质量矩阵做法：一致（完整非对角）质量 / 集中（对角）质量 */
+export type MassFormulation = 'consistent' | 'lumped';
+
+/** 单个固有振动模态 */
+export interface ModeShape {
+  /** 阶号（从 1 开始，仅计非刚体弹性模态） */
+  order: number;
+  /** 圆频率 ω（rad/s） */
+  omega: number;
+  /** 工程频率 f = ω/(2π)（Hz） */
+  hz: number;
+  /** 特征值 ω² */
+  lambda: number;
+  /**
+   * 归一化振型（质量归一化：φᵀMφ = 1），
+   * 扁平化存储 [ux0, uy0, ux1, uy1, ...]，被约束自由度为 0。
+   */
+  vector: Float64Array;
+  /** |Kφ − ω²Mφ| 的相对范数（残差，越小越好） */
+  residual: number;
+  /** Rayleigh 商 φᵀKφ / φᵀMφ（归一化后应 ≈ ω²） */
+  rayleighQuotient: number;
+}
+
+export interface ModalAnalysisResult {
+  modes: ModeShape[];
+  /** 被识别并剔除的刚体模态数（约束不足时 > 0） */
+  rigidBodyModes: number;
+  /** 参与求解的（消去约束自由度后的）自由度数 */
+  freeDofs: number;
+  /** 约束自由度数 */
+  constrainedDofs: number;
+  massFormulation: MassFormulation;
+  /** 总质量（所有节点 x 方向质量之和，用于核验质量守恒） */
+  totalMass: number;
+  /** 求解路径诊断 */
+  diagnostics: {
+    solver: 'dense-symmetric' | 'block-lanczos';
+    iterations?: number;
   };
 }
 

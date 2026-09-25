@@ -39,10 +39,23 @@ export function effectiveThickness(mat: Material): number {
   return mat.thickness;
 }
 
+/**
+ * 钢材默认质量密度（mm-N-MPa 单位制）：
+ * ρ = 7850 kg/m³ = 7.85×10⁻⁹ N·s²/mm⁴。
+ * 因为频率 ∝ √(E/ρ)，只要 E 与 ρ 的单位制自洽，频率结果即为 rad/s。
+ */
+export const STEEL_DENSITY = 7.85e-9;
+
+/** 取材料密度，缺省时使用钢材默认值 */
+export function effectiveDensity(mat: Material): number {
+  return mat.density && mat.density > 0 ? mat.density : STEEL_DENSITY;
+}
+
 /** 默认钢材参数：E=210 GPa（若使用 mm-N-MPa 单位制即 210000 MPa），ν=0.3 */
 export const STEEL_MATERIAL: Material = {
   E: 210000,
   nu: 0.3,
   thickness: 10,
   model: 'planeStress',
+  density: STEEL_DENSITY,
 };
