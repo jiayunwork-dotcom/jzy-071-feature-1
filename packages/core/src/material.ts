@@ -39,10 +39,24 @@ export function effectiveThickness(mat: Material): number {
   return mat.thickness;
 }
 
+/**
+ * 质量密度：未显式给定时按钢材量级取默认值。
+ * 在 mm-N-MPa 自洽单位制中 1 N = 1 kg·mm/s²，故密度以 kg/mm³ 计：
+ * 钢 ρ = 7850 kg/m³ = 7.85×10⁻⁶ kg/mm³
+ * （对应重力密度 ρg ≈ 7.7×10⁻² N/mm³，g=9810 mm/s²）。
+ */
+export const STEEL_DENSITY = 7.85e-6;
+
+/** 取材料质量密度，缺省回退到钢材默认值 */
+export function materialDensity(mat: Material): number {
+  return mat.rho && mat.rho > 0 && Number.isFinite(mat.rho) ? mat.rho : STEEL_DENSITY;
+}
+
 /** 默认钢材参数：E=210 GPa（若使用 mm-N-MPa 单位制即 210000 MPa），ν=0.3 */
 export const STEEL_MATERIAL: Material = {
   E: 210000,
   nu: 0.3,
   thickness: 10,
   model: 'planeStress',
+  rho: STEEL_DENSITY,
 };

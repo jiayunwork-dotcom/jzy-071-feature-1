@@ -1,11 +1,11 @@
 /**
- * 整体刚度矩阵装配。
- * 采用稀疏 CSR 结构：K 对称，装配时先按上三角 (i<=j) 累加，
+ * 整体矩阵装配（刚度 K 与质量 M 共用同一套自由度编号与 CSR 组织方式）。
+ * 采用稀疏 CSR 结构：矩阵对称，装配时先按上三角 (i<=j) 累加，
  * 再把非对角项镜像到下三角。
  */
 import type { FemModel } from './types.js';
-import { createCst, elementStiffness } from './element.js';
-import { constitutiveMatrix, effectiveThickness } from './material.js';
+import { createCst, elementStiffness, elementConsistentMass, elementLumpedMass } from './element.js';
+import { constitutiveMatrix, effectiveThickness, materialDensity } from './material.js';
 
 export interface SparseMatrix {
   n: number;
@@ -17,30 +17,37 @@ export interface SparseMatrix {
   diagPos: Int32Array;
 }
 
-/** 装配整体刚度矩阵（稀疏 CSR） */
-export function assembleStiffness(model: FemModel): SparseMatrix {
-  const { mesh, material } = model;
-  const n = mesh.nodes.length * 2;
-  const D = constitutiveMatrix(material);
-  const t = effectiveThickness(material);
+/** 单元 → 6×6 单元矩阵（行主序）的提供者 */
+type ElementMatrixProvider = (
+  tri: [number, number, number],
+) => Float64Array;
 
-  // 先建立上三角稀疏模式
+/**
+ * 对称整体矩阵的通用装配：
+ * 1) 扫描全部单元建立完整（上下三角）稀疏模式；
+ * 2) 逐单元把 6×6 单元矩阵按自由度编号 (2n, 2n+1) 累加；
+ * 3) 非对角项镜像，得到对称 CSR。
+ *
+ * 刚度与质量矩阵都走这里，保证二者自由度排布严格对齐。
+ */
+function assembleSymmetricMatrix(n: number, elements: (readonly [number, number, number])[], provide: ElementMatrixProvider): SparseMatrix {
+  // 完整对称稀疏模式（上下三角都建立，避免二次重排）
   const pattern: Set<number>[] = Array.from({ length: n }, () => new Set<number>());
   for (let i = 0; i < n; i++) pattern[i].add(i);
 
-  for (const tri of mesh.elements) {
+  for (const tri of elements) {
     const dofs: number[] = [];
     for (const node of tri) dofs.push(2 * node, 2 * node + 1);
     for (let a = 0; a < 6; a++) {
-      for (let b = a; b < 6; b++) {
+      for (let b = 0; b < 6; b++) {
         const i = dofs[a], j = dofs[b];
-        if (i <= j) pattern[i].add(j);
-        else pattern[j].add(i);
+        const lo = i <= j ? i : j;
+        const hi = i <= j ? j : i;
+        pattern[lo].add(hi);
       }
     }
   }
 
-  // 转 CSR
   const rowPtr = new Int32Array(n + 1);
   let nnz = 0;
   for (let i = 0; i < n; i++) {
@@ -61,25 +68,23 @@ export function assembleStiffness(model: FemModel): SparseMatrix {
     }
   }
 
-  // 累加单元刚度（上三角）
-  for (const tri of mesh.elements) {
-    const elem = createCst(mesh.nodes[tri[0]], mesh.nodes[tri[1]], mesh.nodes[tri[2]], tri);
-    const Ke = elementStiffness(elem, D, t);
+  // 累加单元矩阵的上三角（a<=b），按自由度对的 (lo,hi) 存入对称存储；
+  // 展开为完整 CSR 时再镜像，非对角元不会被重复计数
+  for (const tri of elements) {
+    const Me = provide(tri as [number, number, number]);
     const dofs: number[] = [];
     for (const node of tri) dofs.push(2 * node, 2 * node + 1);
     for (let a = 0; a < 6; a++) {
       for (let b = a; b < 6; b++) {
         const i = dofs[a], j = dofs[b];
-        let r = i, c = j;
-        if (r > c) [r, c] = [c, r];
-        const pos = locateEntry(rowPtr, colIdx, r, c);
-        values[pos] += Ke[a * 6 + b];
+        const lo = i <= j ? i : j;
+        const hi = i <= j ? j : i;
+        values[locateEntry(rowPtr, colIdx, lo, hi)] += Me[a * 6 + b];
       }
     }
   }
 
-  // 镜像到下三角（数值求解需要完整矩阵；对称存储也可，但 CSR 乘向量更直接）
-  // 重新分配完整 CSR
+  // 展开为完整 CSR（数值求解需要完整矩阵；CSR 乘向量更直接）
   const fullPattern: Set<number>[] = Array.from({ length: n }, () => new Set<number>());
   for (let i = 0; i < n; i++) {
     for (let p = rowPtr[i]; p < rowPtr[i + 1]; p++) {
@@ -104,16 +109,49 @@ export function assembleStiffness(model: FemModel): SparseMatrix {
     for (const c of cols) {
       fullCol[p] = c;
       if (c === i) fullDiag[i] = p;
-      if (i <= c) {
-        fullVal[p] = values[locateEntry(rowPtr, colIdx, i, c)];
-      } else {
-        fullVal[p] = values[locateEntry(rowPtr, colIdx, c, i)];
-      }
+      fullVal[p] = i <= c
+        ? values[locateEntry(rowPtr, colIdx, i, c)]
+        : values[locateEntry(rowPtr, colIdx, c, i)];
       p++;
     }
   }
 
   return { n, rowPtr: fullRowPtr, colIdx: fullCol, values: fullVal, diagPos: fullDiag };
+}
+
+/** 装配整体刚度矩阵（稀疏 CSR） */
+export function assembleStiffness(model: FemModel): SparseMatrix {
+  const { mesh, material } = model;
+  const n = mesh.nodes.length * 2;
+  const D = constitutiveMatrix(material);
+  const t = effectiveThickness(material);
+
+  return assembleSymmetricMatrix(n, mesh.elements as [number, number, number][], (tri) => {
+    const elem = createCst(mesh.nodes[tri[0]], mesh.nodes[tri[1]], mesh.nodes[tri[2]], tri);
+    return elementStiffness(elem, D, t);
+  });
+}
+
+/**
+ * 装配整体质量矩阵（稀疏 CSR），自由度排布与刚度矩阵完全一致。
+ * - consistent：单元一致质量（非对角，含单元内耦合）；
+ * - lumped：集中质量（纯对角）。
+ */
+export function assembleMass(
+  model: FemModel,
+  kind: 'consistent' | 'lumped' = 'consistent',
+): SparseMatrix {
+  const { mesh, material } = model;
+  const n = mesh.nodes.length * 2;
+  const rho = materialDensity(material);
+  const t = effectiveThickness(material);
+
+  return assembleSymmetricMatrix(n, mesh.elements as [number, number, number][], (tri) => {
+    const elem = createCst(mesh.nodes[tri[0]], mesh.nodes[tri[1]], mesh.nodes[tri[2]], tri);
+    return kind === 'lumped'
+      ? elementLumpedMass(elem, rho, t)
+      : elementConsistentMass(elem, rho, t);
+  });
 }
 
 /** 在 CSR 矩阵中定位 (i, j)，不存在时返回 -1 */
@@ -156,7 +194,8 @@ export function applyBoundaryConditions(
         const pos = locateEntry(K.rowPtr, K.colIdx, i, dof);
         if (pos >= 0) F[i] -= K.values[pos] * val;
       }
-    }    for (let p = K.rowPtr[dof]; p < K.rowPtr[dof + 1]; p++) {
+    }
+    for (let p = K.rowPtr[dof]; p < K.rowPtr[dof + 1]; p++) {
       K.values[p] = K.colIdx[p] === dof ? 1 : 0;
     }
     // 对称列清零

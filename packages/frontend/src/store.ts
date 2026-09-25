@@ -13,6 +13,9 @@ import type {
   SupportType,
   ToolMode,
   TractionLoad,
+  VibrationReference,
+  VibrationResult,
+  MassMatrixType,
   Vec2,
 } from './types';
 
@@ -31,6 +34,7 @@ export const material = writable<Material>({
   nu: 0.3,
   thickness: 10,
   model: 'planeStress',
+  rho: 7.85e-6,
 });
 export const supports = writable<Support[]>([]);
 export const nodalLoads = writable<NodalLoad[]>([]);
@@ -39,6 +43,17 @@ export const bodyLoad = writable<BodyLoad>({ fx: 0, fy: 0 });
 
 export const result = writable<ResultDTO | null>(null);
 export const convergence = writable<ConvergenceStudy | null>(null);
+
+// —— 自由振动（与静力平级的独立分析）——
+export const vibrationResult = writable<VibrationResult | null>(null);
+export const vibrationModeCount = writable(6);
+export const vibrationMassType = writable<MassMatrixType>('consistent');
+export const selectedModeOrder = writable<number | null>(null);
+/** 振型放大系数（振型只有相对形状，需放大到肉眼可辨） */
+export const modeExaggeration = writable(20);
+/** 是否以来回摆动动画显示振型 */
+export const modeAnimate = writable(true);
+export const showOriginalMeshInMode = writable(true);
 
 export const showDeformed = writable(true);
 export const showStress = writable(false);
@@ -56,6 +71,7 @@ export const referenceSolution = writable<{
   maxStress?: number;
   formula: string;
 } | null>(null);
+export const vibrationReference = writable<VibrationReference | null>(null);
 
 let idCounter = 1;
 export function nextId(prefix: string): string {
@@ -78,6 +94,9 @@ export function resetAll() {
   bodyLoad.set({ fx: 0, fy: 0 });
   result.set(null);
   convergence.set(null);
+  vibrationResult.set(null);
+  selectedModeOrder.set(null);
+  vibrationReference.set(null);
   selectedVertex.set(null);
 }
 

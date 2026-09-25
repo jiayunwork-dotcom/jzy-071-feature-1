@@ -4,6 +4,9 @@ import type {
   ModelDTO,
   Polygon,
   ResultDTO,
+  VibrationResult,
+  VibrationReference,
+  MassMatrixType,
 } from './types';
 
 const BASE = '/api';
@@ -37,6 +40,19 @@ export async function fetchAnalyze(model: ModelDTO): Promise<ResultDTO> {
   return data.result;
 }
 
+export async function fetchVibration(
+  model: ModelDTO,
+  modeCount: number,
+  massMatrix: MassMatrixType,
+): Promise<VibrationResult> {
+  const data = await post<{ result: VibrationResult }>('/vibration', {
+    ...model,
+    modeCount,
+    massMatrix,
+  });
+  return data.result;
+}
+
 export async function fetchConvergence(
   model: ModelDTO,
   seed: number,
@@ -61,6 +77,7 @@ export interface ExampleSummary {
   description: string;
   seed: number;
   reference: { label: string; tipDisplacement?: number; maxStress?: number; formula: string };
+  vibration?: VibrationReference;
 }
 
 export interface ExampleDetail extends ModelDTO {
@@ -69,6 +86,7 @@ export interface ExampleDetail extends ModelDTO {
   description: string;
   seed: number;
   reference: ExampleSummary['reference'];
+  vibration?: VibrationReference;
 }
 
 export async function fetchExamples(): Promise<ExampleSummary[]> {

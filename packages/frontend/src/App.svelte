@@ -5,7 +5,9 @@
   import MaterialPanel from './components/MaterialPanel.svelte';
   import BcPanel from './components/BcPanel.svelte';
   import SolvePanel from './components/SolvePanel.svelte';
+  import VibrationPanel from './components/VibrationPanel.svelte';
   import ResultPanel from './components/ResultPanel.svelte';
+  import ModeViewPanel from './components/ModeViewPanel.svelte';
   import ConvergencePanel from './components/ConvergencePanel.svelte';
   import { statusMessage } from './store';
 </script>
@@ -15,8 +17,8 @@
     <div class="brand">
       <span class="logo">△</span>
       <div>
-        <h1>FEM2D 二维有限元静力分析</h1>
-        <p>平面应力 / 平面应变 · 三角常应变单元（CST）· 教学可核验</p>
+        <h1>FEM2D 二维有限元分析 · 静力与自由振动</h1>
+        <p>平面应力 / 平面应变 · 三角常应变单元（CST）· 静力 K u=F 与模态 (K−ω²M)φ=0 · 教学可核验</p>
       </div>
     </div>
   </header>
@@ -27,6 +29,7 @@
       <MaterialPanel />
       <BcPanel />
       <SolvePanel />
+      <VibrationPanel />
     </aside>
 
     <section class="center">
@@ -40,6 +43,7 @@
     </section>
 
     <aside class="sidebar right">
+      <ModeViewPanel />
       <ResultPanel />
       <ConvergencePanel />
     </aside>

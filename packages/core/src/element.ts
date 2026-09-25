@@ -96,6 +96,58 @@ export function bodyForceLoad(elem: CstElement, thickness: number, bx: number, b
   return fe;
 }
 
+/**
+ * 单元一致质量矩阵（consistent mass）：
+ * Me = ρ·t·∫ NᵀN dΩ = ρ t A / 12 ·
+ *   [2 0 1 0 1 0;
+ *    0 2 0 1 0 1;
+ *    1 0 2 0 1 0;
+ *    0 1 0 2 0 1;
+ *    1 0 1 0 2 0;
+ *    0 1 0 1 0 2]
+ *
+ * 由线性三角形形函数在单元上的积分
+ *   ∫ N_i N_j dΩ = A/12（i≠j），∫ N_i² dΩ = A/6
+ * 得到。行和之和等于单元总质量 ρ t A（每个平动方向），
+ * 是比实际偏柔的质量近似（一致质量求得的频率系统性偏低）。
+ */
+export function elementConsistentMass(
+  elem: CstElement,
+  density: number,
+  thickness: number,
+): Float64Array {
+  const Me = new Float64Array(36);
+  const diag = (density * thickness * elem.area) / 6;
+  const off = (density * thickness * elem.area) / 12;
+  for (let a = 0; a < 3; a++) {
+    for (let b = 0; b < 3; b++) {
+      Me[a * 2 * 6 + b * 2] = a === b ? diag : off;
+      Me[(a * 2 + 1) * 6 + b * 2 + 1] = a === b ? diag : off;
+    }
+  }
+  return Me;
+}
+
+/**
+ * 单元集中（对角）质量矩阵（lumped mass）：
+ * 按行和（HRZ 对角化的线性三角形特例）把单元总质量 ρ t A
+ * 平均凝聚到 3 个节点，每个节点的两个平动自由度各分得 ρ t A / 3。
+ * 得到纯对角阵，比实际偏刚（集中质量求得的频率系统性偏高）。
+ */
+export function elementLumpedMass(
+  elem: CstElement,
+  density: number,
+  thickness: number,
+): Float64Array {
+  const Me = new Float64Array(36);
+  const mNode = (density * thickness * elem.area) / 3;
+  for (let a = 0; a < 3; a++) {
+    Me[a * 2 * 6 + a * 2] = mNode;
+    Me[(a * 2 + 1) * 6 + a * 2 + 1] = mNode;
+  }
+  return Me;
+}
+
 /** 单元常应变 ε = B·ue */
 export function elementStrain(elem: CstElement, ue: Float64Array | number[]): [number, number, number] {
   const B = elem.B;

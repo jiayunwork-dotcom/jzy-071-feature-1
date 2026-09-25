@@ -2,6 +2,7 @@
  * FEM2D HTTP 服务：
  * - POST /api/mesh          三角剖分
  * - POST /api/analyze       静力求解（位移+应力）
+ * - POST /api/vibration     自由振动（固有频率+振型）
  * - POST /api/convergence   网格无关性研究
  * - GET  /api/examples      标准算例列表
  * - GET  /api/examples/:id  载入标准算例（含已剖分网格）
@@ -14,10 +15,12 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   analyze,
+  analyzeVibration,
   triangulate,
   runConvergence,
   meshToModel,
   resultToDTO,
+  vibrationToDTO,
   EXAMPLE_CASES,
   getExample,
   SingularMatrixError,
@@ -29,6 +32,7 @@ import {
   type NodalLoad,
   type TractionLoad,
   type BodyLoad,
+  type MassMatrixType,
 } from '@fem2d/core';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +52,7 @@ app.get('/api/examples', (_req, res) => {
       description: c.description,
       seed: c.seed,
       reference: c.reference,
+      vibration: c.vibration,
     })),
   });
 });
@@ -72,6 +77,7 @@ app.get('/api/examples/:id', (req, res) => {
     tractionLoads: model.tractionLoads,
     bodyLoad: model.bodyLoad,
     reference: ex.reference,
+    vibration: ex.vibration,
   });
 });
 
@@ -99,6 +105,30 @@ app.post('/api/analyze', (req, res) => {
     respondError(res, err);
   }
 });
+
+app.post('/api/vibration', (req, res) => {
+  try {
+    const { modeCount, massMatrix } = req.body as {
+      modeCount?: number;
+      massMatrix?: MassMatrixType;
+    };
+    const model = meshToModel(req.body);
+    const result = analyzeVibration(model, {
+      modeCount: clampModeCount(modeCount),
+      massMatrix: massMatrix === 'lumped' ? 'lumped' : 'consistent',
+      denseThreshold: 2000,
+    });
+    res.json({ result: vibrationToDTO(result) });
+  } catch (err) {
+    respondError(res, err);
+  }
+});
+
+function clampModeCount(n: unknown): number {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return 6;
+  return Math.max(1, Math.min(30, Math.round(v)));
+}
 
 app.post('/api/convergence', (req, res) => {
   try {

@@ -4,6 +4,8 @@ export * from './material.js';
 export * from './conditions.js';
 export * from './assembly.js';
 export * from './solver.js';
+export * from './eigen.js';
+export * from './vibration.js';
 export * from './stress.js';
 export * from './analyze.js';
 export * from './convergence.js';

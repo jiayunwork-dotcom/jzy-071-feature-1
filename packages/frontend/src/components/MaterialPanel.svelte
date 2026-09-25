@@ -13,6 +13,14 @@
   <label>厚度 t（mm，平面应力）
     <input type="number" step="any" bind:value={$material.thickness} />
   </label>
+  <label>质量密度 ρ（kg/mm³，自由振动用）
+    <input
+      type="number"
+      step="any"
+      bind:value={$material.rho}
+      placeholder="7.85e-6（钢）"
+    />
+  </label>
 
   <div class="model-switch">
     <button
@@ -35,6 +43,7 @@
     {:else}
       D = E/((1+ν)(1−2ν)) · [1−ν, ν, 0; ν, 1−ν, 0; 0, 0, (1−2ν)/2]
     {/if}
+    <div class="rho-note">质量矩阵按 ρ 装配；钢在 mm-N-MPa 单位制下 ρ = 7.85×10⁻⁶ kg/mm³。</div>
   </div>
 </div>
 
@@ -52,4 +61,5 @@
     margin-top: 8px; font-size: 11px; color: #64748b; line-height: 1.5;
     font-family: ui-monospace, monospace; word-break: break-all;
   }
+  .rho-note { margin-top: 4px; font-family: inherit; color: #94a3b8; }
 </style>

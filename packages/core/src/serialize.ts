@@ -8,6 +8,7 @@ import type {
   Material,
   Mesh,
   Polygon,
+  VibrationResult,
 } from './types.js';
 
 export interface MeshDTO {
@@ -71,6 +72,47 @@ export function resultToDTO(r: AnalysisResult): ResultDTO {
     maxSx: r.maxSx,
     maxSy: r.maxSy,
     maxTxy: r.maxTxy,
+    diagnostics: r.diagnostics,
+  };
+}
+
+export interface VibrationModeDTO {
+  order: number;
+  omega: number;
+  frequencyHz: number;
+  shape: number[];
+  xKineticFraction: number;
+  residual: number;
+}
+
+export interface VibrationResultDTO {
+  modes: VibrationModeDTO[];
+  massMatrixType: 'lumped' | 'consistent';
+  constrainedDofs: number;
+  rigidBodyModes: number;
+  freeDofs: number;
+  diagnostics: {
+    iterations: number;
+    tolerance: number;
+    maxCrossOrthogonality: number;
+    totalMass: number;
+  };
+}
+
+export function vibrationToDTO(r: VibrationResult): VibrationResultDTO {
+  return {
+    modes: r.modes.map((m) => ({
+      order: m.order,
+      omega: m.omega,
+      frequencyHz: m.frequencyHz,
+      shape: Array.from(m.shape),
+      xKineticFraction: m.xKineticFraction,
+      residual: m.residual,
+    })),
+    massMatrixType: r.massMatrixType,
+    constrainedDofs: r.constrainedDofs,
+    rigidBodyModes: r.rigidBodyModes,
+    freeDofs: r.freeDofs,
     diagnostics: r.diagnostics,
   };
 }

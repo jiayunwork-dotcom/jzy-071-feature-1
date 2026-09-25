@@ -25,8 +25,16 @@
   import { drawPolygon, drawMesh, drawVertexHandle } from '../lib/render-mesh';
   import { drawSupports, drawNodalLoads, drawTractionLoads } from '../lib/render-bc';
   import { drawStressContour, deformedPositions, drawDeformedWire } from '../lib/render-result';
+  import { drawModeShape } from '../lib/render-mode';
   import { fitView, makeView, toScreen, toWorld, type View } from '../lib/view';
   import { bounds, dist } from '../lib/util';
+  import {
+    vibrationResult,
+    selectedModeOrder,
+    modeExaggeration,
+    modeAnimate,
+    showOriginalMeshInMode,
+  } from '../store';
   import type { Vec2 } from '../types';
 
   let canvas: HTMLCanvasElement;
@@ -41,6 +49,10 @@
   let panStart = { x: 0, y: 0, cx: 0, cy: 0 };
   let tractionFirst: Vec2 | null = null;
   let drawHoverFirst = false;
+
+  // 振型动画相位（由 requestAnimationFrame 时间驱动）
+  let animPhase = 1;
+  let lastFrameTime = performance.now();
 
   function resize() {
     const parent = canvas.parentElement!;
@@ -60,7 +72,16 @@
     if (points.length >= 2) view = fitView(view, bounds(points));
   }
 
-  function loop() {
+  function loop(now: number) {
+    // 振型动画：视觉上按 u(t)=φ·sin(ωt) 来回摆动；为避免高阶 ω 过大闪成一团，
+    // 屏幕摆动周期统一取约 1.6s（频率数值仍以面板列出的真实 ω 为准）。
+    lastFrameTime = now;
+    const sel = $vibrationResult?.modes.find((m) => m.order === $selectedModeOrder) ?? null;
+    if (sel && $modeAnimate) {
+      animPhase = Math.sin(((2 * Math.PI) / 1.6) * (now / 1000));
+    } else if (sel) {
+      animPhase = 1;
+    }
     render();
     raf = requestAnimationFrame(loop);
   }
@@ -84,7 +105,17 @@
     const curResult = $result;
     const $poly = $polygon;
 
-    if (curResult && $showStress) {
+    // 选中的振动模态（与静力变形/应力互斥地优先显示）
+    const curMode = $vibrationResult?.modes.find((m) => m.order === $selectedModeOrder) ?? null;
+
+    if (curMode && curMesh) {
+      drawMesh(ctx, view, curMesh, { edgeColor: 'rgba(71,85,105,0.35)', fill: false, showNodes: false });
+      drawModeShape(ctx, view, curMesh, curMode, {
+        exaggeration: $modeExaggeration,
+        phase: animPhase,
+        showOriginal: $showOriginalMeshInMode,
+      });
+    } else if (curResult && $showStress) {
       const def =
         $showDeformed
           ? deformedPositions(curMesh!, curResult.displacement, $exaggeration)
@@ -104,8 +135,8 @@
       drawPolygon(ctx, view, $poly, closed);
     }
 
-    // 变形图叠加
-    if ($result && $mesh && $showDeformed && !$showStress) {
+    // 变形图叠加（静力；选中振动模态时不显示）
+    if ($result && $mesh && $showDeformed && !$showStress && !curMode) {
       const def = deformedPositions($mesh, $result.displacement, $exaggeration);
       if ($showOriginal) drawMesh(ctx, view, $mesh, { edgeColor: 'rgba(71,85,105,0.5)' });
       drawDeformedWire(ctx, view, $mesh, def);
@@ -145,6 +176,20 @@
       if (drawHoverFirst) drawVertexHandle(ctx, view, $poly.outer[0], true);
     }
 
+    // 当前查看的是振动模态时，左上角给出明确标识（区别于静力变形）
+    if (curMode) {
+      const label = `振动模态 · 第 ${curMode.order} 阶 · ${curMode.frequencyHz.toFixed(2)} Hz`;
+      ctx.save();
+      ctx.font = '600 13px sans-serif';
+      const w = ctx.measureText(label).width + 22;
+      ctx.fillStyle = 'rgba(15,118,110,0.92)';
+      roundRect(ctx, 12, 12, w, 28, 7);
+      ctx.fill();
+      ctx.fillStyle = '#ecfeff';
+      ctx.fillText(label, 23, 30);
+      ctx.restore();
+    }
+
     // 面力第一段的预览
     if (tractionFirst) {
       const [x0, y0] = toScreen(view, tractionFirst.x, tractionFirst.y);
@@ -160,8 +205,17 @@
     }
   }
 
-  function drawBoundaryOnly(ctx: CanvasRenderingContext2D, m: NonNullable<typeof $mesh>) {
-    ctx.save();
+  function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawBoundaryOnly(ctx: CanvasRenderingContext2D, m: NonNullable<typeof $mesh>) {    ctx.save();
     ctx.strokeStyle = 'rgba(15,23,42,0.6)';
     ctx.lineWidth = 1.6;
     ctx.beginPath();
@@ -287,6 +341,8 @@
         nodalLoads.set([]);
         tractionLoads.set([]);
         result.set(null);
+        vibrationResult.set(null);
+        selectedModeOrder.set(null);
         setStatus('顶点已移动，需重新生成网格（原有边界条件已清空）', 'info');
       }
     }
@@ -428,7 +484,7 @@
     ctx = canvas.getContext('2d')!;
     resize();
     window.addEventListener('resize', resize);
-    loop();
+    loop(performance.now());
     // 初始视图
     view = { ...view, scale: 8, cx: 50, cy: 0 };
   });

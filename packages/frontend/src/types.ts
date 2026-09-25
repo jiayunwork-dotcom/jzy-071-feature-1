@@ -64,6 +64,8 @@ export interface Material {
   nu: number;
   thickness: number;
   model: 'planeStress' | 'planeStrain';
+  /** 质量密度（kg/mm³），缺省钢材 7.85×10⁻⁶ */
+  rho?: number;
 }
 
 export interface ModelDTO {
@@ -127,3 +129,41 @@ export type ToolMode =
   | 'pan';
 
 export type StressField = 'sx' | 'sy' | 'txy' | 'vm';
+
+export type MassMatrixType = 'consistent' | 'lumped';
+
+export interface VibrationMode {
+  order: number;
+  omega: number;
+  frequencyHz: number;
+  shape: number[];
+  xKineticFraction: number;
+  residual: number;
+}
+
+export interface VibrationResult {
+  modes: VibrationMode[];
+  massMatrixType: MassMatrixType;
+  constrainedDofs: number;
+  rigidBodyModes: number;
+  freeDofs: number;
+  diagnostics: {
+    iterations: number;
+    tolerance: number;
+    maxCrossOrthogonality: number;
+    totalMass: number;
+  };
+}
+
+export interface VibrationReferenceFrequency {
+  order: number;
+  label: string;
+  hz: number;
+  kind: 'bending' | 'longitudinal' | 'other';
+}
+
+export interface VibrationReference {
+  label: string;
+  formula: string;
+  frequencies: VibrationReferenceFrequency[];
+}

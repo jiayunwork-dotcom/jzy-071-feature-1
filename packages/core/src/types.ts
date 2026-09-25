@@ -97,6 +97,11 @@ export interface Material {
   /** 厚度 t（平面应力下使用；平面应变内部按 t=1 处理） */
   thickness: number;
   model: 'planeStress' | 'planeStrain';
+  /**
+   * 质量密度（质量/体积）。缺省时取钢材量级 STEEL_DENSITY。
+   * mm-N-MPa 单位制下 ρ ≈ 7.85×10⁻⁹ t/mm³（= 7850 kg/m³）。
+   */
+  rho?: number;
 }
 
 /** 完整分析模型 */
@@ -155,4 +160,61 @@ export class SingularMatrixError extends Error {
     this.name = 'SingularMatrixError';
     this.nullity = nullity;
   }
+}
+
+/** 质量矩阵类型：lumped 集中质量（纯对角）/ consistent 一致质量（保留单元内耦合） */
+export type MassMatrixType = 'lumped' | 'consistent';
+
+/** 一阶自由振动模态（弹性变形模态，已剔除刚体模态） */
+export interface VibrationMode {
+  /** 阶次（从 1 开始，按频率从低到高） */
+  order: number;
+  /** 圆频率 ω (rad/s)，满足 ω² = φᵀKφ / φᵀMφ */
+  omega: number;
+  /** 固有频率 f = ω/(2π) (Hz) */
+  frequencyHz: number;
+  /**
+   * 质量归一化振型 φ（全局自由度，扁平 [ux0,uy0,...]）：
+   * φᵀ M φ = 1，约束自由度处为 0
+   */
+  shape: Float64Array;
+  /** x 向动能占比（用于把纵向振动模态和弯曲模态区分开），∈ [0,1] */
+  xKineticFraction: number;
+  /** Rayleigh 商相对残差 |Kφ − ω²Mφ| / (ω²·|Mφ|) */
+  residual: number;
+}
+
+export interface VibrationResult {
+  modes: VibrationMode[];
+  massMatrixType: MassMatrixType;
+  /** 被消去的约束自由度数量 */
+  constrainedDofs: number;
+  /** 识别并剔除的刚体模态数量（自由/欠约束结构通常为 3） */
+  rigidBodyModes: number;
+  /** 参与求解的（自由）自由度数量 */
+  freeDofs: number;
+  diagnostics: {
+    /** 子空间逆迭代步数 */
+    iterations: number;
+    /** 末阶模态的相对收敛容差 */
+    tolerance: number;
+    /** 不同模态间质量加权内积的最大绝对值（应 ≈ 0） */
+    maxCrossOrthogonality: number;
+    /** 装配得到的总质量（供与 ρ·V·t 核对） */
+    totalMass: number;
+  };
+}
+
+/** 自由振动分析选项 */
+export interface VibrationOptions {
+  /** 求解阶数（弹性模态），默认 6 */
+  modeCount?: number;
+  /** 质量矩阵类型，默认一致质量 */
+  massMatrix?: MassMatrixType;
+  /** 稠密逆迭代路径的自由自由度阈值（超过则走稀疏 PCG 路径） */
+  denseThreshold?: number;
+  /** 子空间迭代最大步数 */
+  maxIterations?: number;
+  /** 收敛容差（相邻两步特征值相对变化） */
+  tolerance?: number;
 }

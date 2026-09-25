@@ -14,6 +14,9 @@
     material,
     result,
     referenceSolution,
+    vibrationResult,
+    selectedModeOrder,
+    vibrationReference,
   } from '../store';
   import { fetchMesh, fetchExample, fetchExamples, type ExampleSummary } from '../api';
 
@@ -95,7 +98,10 @@
       bodyLoad.set(ex.bodyLoad ?? { fx: 0, fy: 0 });
       material.set(ex.material);
       result.set(null);
+      vibrationResult.set(null);
+      selectedModeOrder.set(null);
       referenceSolution.set(ex.reference);
+      vibrationReference.set(ex.vibration ?? null);
       setStatus(`已载入算例：${ex.name}`, 'ok');
     } catch (e) {
       setStatus((e as Error).message, 'error');
